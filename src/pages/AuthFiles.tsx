@@ -7,6 +7,7 @@ import {
   downloadAuthFile,
   deleteAllAuthFiles,
   uploadAuthFile,
+  refreshAuthStatus,
   type AuthFile,
 } from "../lib/tauri";
 import { appStore } from "../stores/app";
@@ -42,6 +43,7 @@ export function AuthFilesPage() {
   const [loading, setLoading] = createSignal(false);
   const [filter, setFilter] = createSignal<string>("all");
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = createSignal(false);
+  const [fileToDelete, setFileToDelete] = createSignal<AuthFile | null>(null);
 
   // Load auth files on mount and when proxy status changes
   createEffect(() => {
@@ -93,12 +95,21 @@ export function AuthFilesPage() {
   };
 
   const handleDelete = async (file: AuthFile) => {
-    if (!confirm(`Delete ${file.name}?`)) return;
+    setFileToDelete(file);
+  };
+
+  const confirmDelete = async () => {
+    const file = fileToDelete();
+    if (!file) return;
 
     try {
       await deleteAuthFile(file.id);
       toastStore.success("Auth file deleted");
+      setFileToDelete(null);
+      // Refresh both file list and global auth status
       loadFiles();
+      const newAuthStatus = await refreshAuthStatus();
+      appStore.setAuthStatus(newAuthStatus);
     } catch (err) {
       toastStore.error(`Failed to delete: ${err}`);
     }
@@ -130,7 +141,10 @@ export function AuthFilesPage() {
       await deleteAllAuthFiles();
       toastStore.success("All auth files deleted");
       setShowDeleteAllConfirm(false);
+      // Refresh both file list and global auth status
       loadFiles();
+      const newAuthStatus = await refreshAuthStatus();
+      appStore.setAuthStatus(newAuthStatus);
     } catch (err) {
       toastStore.error(`Failed to delete all: ${err}`);
     }
@@ -570,6 +584,36 @@ export function AuthFilesPage() {
                 class="bg-red-500 hover:bg-red-600"
               >
                 Delete All
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Delete Single File Confirmation Modal */}
+      <Show when={fileToDelete()}>
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div class="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-md w-full mx-4 border border-gray-200 dark:border-gray-700 shadow-xl">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+              Delete Auth File?
+            </h3>
+            <p class="text-gray-600 dark:text-gray-400 mb-6">
+              Delete{" "}
+              <span class="font-medium text-gray-900 dark:text-gray-100">
+                {fileToDelete()?.name}
+              </span>
+              ? You will need to re-authenticate with this provider.
+            </p>
+            <div class="flex justify-end gap-3">
+              <Button variant="ghost" onClick={() => setFileToDelete(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={confirmDelete}
+                class="bg-red-500 hover:bg-red-600"
+              >
+                Delete
               </Button>
             </div>
           </div>
