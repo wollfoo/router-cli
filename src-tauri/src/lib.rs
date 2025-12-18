@@ -256,7 +256,7 @@ impl Default for AppConfig {
             quota_switch_preview_model: false,
             usage_stats_enabled: true,
             request_logging: false,
-            logging_to_file: false,
+            logging_to_file: true, // Enable by default for Log Viewer to work
             config_version: 1,
             amp_api_key: String::new(),
             amp_model_mappings: Vec::new(),

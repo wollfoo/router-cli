@@ -1,3 +1,4 @@
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import type {
 	CopilotApiDetection,
@@ -170,12 +171,56 @@ export function CopilotCard(props: CopilotCardProps) {
 		}
 	};
 
-	const handleOpenGitHubAuth = () => {
-		window.open("https://github.com/login/device", "_blank");
+	const handleOpenGitHubAuth = async () => {
+		try {
+			await openUrl("https://github.com/login/device");
+		} catch (err) {
+			console.error("Failed to open GitHub auth URL:", err);
+			// Fallback: hiển thị URL để user copy thủ công
+			// Fallback: show URL for user to copy manually
+			toastStore.error(
+				"Không thể mở browser",
+				"Truy cập thủ công: https://github.com/login/device",
+			);
+		}
 	};
 
 	const isConnected = () => status().running && status().authenticated;
 	const isRunningNotAuth = () => status().running && !status().authenticated;
+
+	// Parse device code từ auth message
+	// Parse device code from auth message
+	const getDeviceCode = () => {
+		const msg = authMessage();
+		if (!msg) return null;
+		// Các pattern phổ biến từ copilot-api:
+		// Common patterns from copilot-api:
+		// - code "XXXX-XXXX" (có dấu ngoặc kép)
+		// - code: XXXX-XXXX
+		// - XXXX-XXXX (standalone)
+		const patterns = [
+			/code\s*["']([A-Z0-9]{4}-[A-Z0-9]{4})["']/i,  // code "XXXX-XXXX"
+			/code[:\s]+([A-Z0-9]{4}-[A-Z0-9]{4})/i,       // code: XXXX-XXXX
+			/([A-Z0-9]{4}-[A-Z0-9]{4})/i,                 // standalone XXXX-XXXX
+		];
+		for (const pattern of patterns) {
+			const match = msg.match(pattern);
+			if (match) return match[1].toUpperCase();
+		}
+		return null;
+	};
+
+	const handleCopyCode = async () => {
+		const code = getDeviceCode();
+		if (code) {
+			try {
+				await navigator.clipboard.writeText(code);
+				toastStore.success("Đã copy!", code);
+			} catch {
+				toastStore.error("Copy thất bại", code);
+			}
+		}
+	};
 
 	return (
 		<div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
@@ -257,9 +302,36 @@ export function CopilotCard(props: CopilotCardProps) {
 									<p class="text-sm font-medium text-amber-800 dark:text-amber-200">
 										GitHub Authentication Required
 									</p>
-									<p class="text-xs text-amber-700 dark:text-amber-300 mt-1">
-										Check the terminal for your device code, then click below to
-										authenticate.
+									<Show
+										when={getDeviceCode()}
+										fallback={
+											<p class="text-xs text-amber-700 dark:text-amber-300 mt-1">
+												Đang chờ device code...
+											</p>
+										}
+									>
+										<div class="mt-2 p-2 bg-white dark:bg-gray-800 rounded-lg border border-amber-300 dark:border-amber-700">
+											<p class="text-xs text-amber-600 dark:text-amber-400 mb-1">
+												Device Code:
+											</p>
+											<div class="flex items-center gap-2">
+												<code class="text-lg font-mono font-bold text-amber-900 dark:text-amber-100 tracking-wider">
+													{getDeviceCode()}
+												</code>
+												<button
+													onClick={handleCopyCode}
+													class="p-1 hover:bg-amber-100 dark:hover:bg-amber-800 rounded"
+													title="Copy code"
+												>
+													<svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+													</svg>
+												</button>
+											</div>
+										</div>
+									</Show>
+									<p class="text-xs text-amber-700 dark:text-amber-300 mt-2">
+										Nhập mã này vào trang GitHub:
 									</p>
 									<Button
 										size="sm"

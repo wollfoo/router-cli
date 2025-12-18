@@ -51,7 +51,7 @@ function createAppStore() {
 		quotaSwitchPreviewModel: false,
 		usageStatsEnabled: true,
 		requestLogging: false,
-		loggingToFile: false,
+		loggingToFile: true, // Bật mặc định để Log Viewer hoạt động
 		ampApiKey: "",
 		ampModelMappings: [],
 		ampOpenaiProvider: undefined,
