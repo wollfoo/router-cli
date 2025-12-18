@@ -24,7 +24,6 @@
 		"solid-js": "^1.9.3"
 	},
 	"devDependencies": {
-		"@solidjs/router": "^0.15.4",
 		"@tauri-apps/cli": "^2",
 		"autoprefixer": "^10.4.22",
 		"postcss": "^8.5.6",
