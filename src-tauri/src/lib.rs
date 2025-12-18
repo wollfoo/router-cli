@@ -1002,7 +1002,7 @@ async fn start_proxy(
     // Build claude-api-key section combining copilot and user's persisted keys
     let claude_api_key_section = {
         let mut entries: Vec<String> = Vec::new();
-        
+
         // Add user's persisted Claude API keys only
         for key in &config.claude_api_keys {
             let mut entry = String::new();
@@ -1015,9 +1015,21 @@ async fn start_proxy(
                     entry.push_str(&format!("    proxy-url: \"{}\"\n", proxy_url));
                 }
             }
+            // Thêm models mapping nếu có
+            if let Some(ref models) = key.models {
+                if !models.is_empty() {
+                    entry.push_str("    models:\n");
+                    for model in models {
+                        // alias là Option<String>, dùng name nếu không có alias
+                        let alias = model.alias.as_ref().unwrap_or(&model.name);
+                        entry.push_str(&format!("      - alias: \"{}\"\n", alias));
+                        entry.push_str(&format!("        name: \"{}\"\n", model.name));
+                    }
+                }
+            }
             entries.push(entry);
         }
-        
+
         if entries.is_empty() {
             String::new()
         } else {
@@ -4707,216 +4719,193 @@ fn convert_to_management_format<T: serde::Serialize>(data: &T) -> Result<serde_j
 }
 
 // Gemini API Keys
+// Đọc từ local config vì Management API không hỗ trợ endpoint này
 #[tauri::command]
 async fn get_gemini_api_keys(state: State<'_, AppState>) -> Result<Vec<GeminiApiKey>, String> {
-    let port = state.config.lock().unwrap().port;
-    let url = get_management_url(port, "gemini-api-key");
-    
-    let client = build_management_client();
-    let response = client
-        .get(&url)
-        .header("X-Management-Key", "proxypal-mgmt-key")
-        .send()
-        .await
-        .map_err(|e| format!("Failed to fetch Gemini API keys: {}", e))?;
-    
-    if !response.status().is_success() {
-        return Ok(Vec::new());
-    }
-    
-    let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
-    convert_api_key_response(json, "gemini-api-key")
+    let config = state.config.lock().unwrap();
+    Ok(config.gemini_api_keys.clone())
 }
 
+// Lưu vào local config vì Management API không hỗ trợ endpoint này
+// Proxy sẽ được restart để áp dụng config mới
 #[tauri::command]
-async fn set_gemini_api_keys(state: State<'_, AppState>, keys: Vec<GeminiApiKey>) -> Result<(), String> {
-    let port = state.config.lock().unwrap().port;
-    let url = get_management_url(port, "gemini-api-key");
-    
-    let client = build_management_client();
-    let body = convert_to_management_format(&keys)?;
-    
-    let response = client
-        .put(&url)
-        .header("X-Management-Key", "proxypal-mgmt-key")
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to set Gemini API keys: {}", e))?;
-    
-    if !response.status().is_success() {
-        let status = response.status();
-        let text = response.text().await.unwrap_or_default();
-        return Err(format!("Failed to set Gemini API keys: {} - {}", status, text));
-    }
-    
-    // Persist to ProxyPal config for restart persistence
+async fn set_gemini_api_keys(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    keys: Vec<GeminiApiKey>,
+) -> Result<(), String> {
+    // Lưu keys vào local config
     {
         let mut config = state.config.lock().unwrap();
         config.gemini_api_keys = keys;
         save_config_to_file(&config)?;
     }
-    
+
+    // Restart proxy để áp dụng config mới (nếu đang chạy)
+    let is_running = {
+        let status = state.proxy_status.lock().unwrap();
+        status.running
+    };
+
+    if is_running {
+        stop_proxy(app.clone(), state.clone()).await?;
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        start_proxy(app, state).await?;
+    }
+
     Ok(())
 }
 
 #[tauri::command]
-async fn add_gemini_api_key(state: State<'_, AppState>, key: GeminiApiKey) -> Result<(), String> {
+async fn add_gemini_api_key(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    key: GeminiApiKey,
+) -> Result<(), String> {
     let mut keys = get_gemini_api_keys(state.clone()).await?;
     keys.push(key);
-    set_gemini_api_keys(state, keys).await
+    set_gemini_api_keys(app, state, keys).await
 }
 
 #[tauri::command]
-async fn delete_gemini_api_key(state: State<'_, AppState>, index: usize) -> Result<(), String> {
+async fn delete_gemini_api_key(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    index: usize,
+) -> Result<(), String> {
     let mut keys = get_gemini_api_keys(state.clone()).await?;
     if index >= keys.len() {
         return Err("Index out of bounds".to_string());
     }
     keys.remove(index);
-    set_gemini_api_keys(state, keys).await
+    set_gemini_api_keys(app, state, keys).await
 }
 
 // Claude API Keys
+// Đọc từ local config vì Management API không hỗ trợ endpoint này
 #[tauri::command]
 async fn get_claude_api_keys(state: State<'_, AppState>) -> Result<Vec<ClaudeApiKey>, String> {
-    let port = state.config.lock().unwrap().port;
-    let url = get_management_url(port, "claude-api-key");
-    
-    let client = build_management_client();
-    let response = client
-        .get(&url)
-        .header("X-Management-Key", "proxypal-mgmt-key")
-        .send()
-        .await
-        .map_err(|e| format!("Failed to fetch Claude API keys: {}", e))?;
-    
-    if !response.status().is_success() {
-        return Ok(Vec::new());
-    }
-    
-    let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
-    convert_api_key_response(json, "claude-api-key")
+    let config = state.config.lock().unwrap();
+    Ok(config.claude_api_keys.clone())
 }
 
+// Lưu vào local config vì Management API không hỗ trợ endpoint này
+// Proxy sẽ được restart để áp dụng config mới
 #[tauri::command]
-async fn set_claude_api_keys(state: State<'_, AppState>, keys: Vec<ClaudeApiKey>) -> Result<(), String> {
-    let port = state.config.lock().unwrap().port;
-    let url = get_management_url(port, "claude-api-key");
-    
-    let client = build_management_client();
-    let body = convert_to_management_format(&keys)?;
-    
-    let response = client
-        .put(&url)
-        .header("X-Management-Key", "proxypal-mgmt-key")
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to set Claude API keys: {}", e))?;
-    
-    if !response.status().is_success() {
-        let status = response.status();
-        let text = response.text().await.unwrap_or_default();
-        return Err(format!("Failed to set Claude API keys: {} - {}", status, text));
-    }
-    
-    // Persist to ProxyPal config for restart persistence
+async fn set_claude_api_keys(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    keys: Vec<ClaudeApiKey>,
+) -> Result<(), String> {
+    // Lưu keys vào local config
     {
         let mut config = state.config.lock().unwrap();
         config.claude_api_keys = keys;
         save_config_to_file(&config)?;
     }
-    
+
+    // Restart proxy để áp dụng config mới (nếu đang chạy)
+    let is_running = {
+        let status = state.proxy_status.lock().unwrap();
+        status.running
+    };
+
+    if is_running {
+        // Stop và start lại proxy
+        stop_proxy(app.clone(), state.clone()).await?;
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        start_proxy(app, state).await?;
+    }
+
     Ok(())
 }
 
 #[tauri::command]
-async fn add_claude_api_key(state: State<'_, AppState>, key: ClaudeApiKey) -> Result<(), String> {
+async fn add_claude_api_key(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    key: ClaudeApiKey,
+) -> Result<(), String> {
     let mut keys = get_claude_api_keys(state.clone()).await?;
     keys.push(key);
-    set_claude_api_keys(state, keys).await
+    set_claude_api_keys(app, state, keys).await
 }
 
 #[tauri::command]
-async fn delete_claude_api_key(state: State<'_, AppState>, index: usize) -> Result<(), String> {
+async fn delete_claude_api_key(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    index: usize,
+) -> Result<(), String> {
     let mut keys = get_claude_api_keys(state.clone()).await?;
     if index >= keys.len() {
         return Err("Index out of bounds".to_string());
     }
     keys.remove(index);
-    set_claude_api_keys(state, keys).await
+    set_claude_api_keys(app, state, keys).await
 }
 
 // Codex API Keys
+// Đọc từ local config vì Management API không hỗ trợ endpoint này
 #[tauri::command]
 async fn get_codex_api_keys(state: State<'_, AppState>) -> Result<Vec<CodexApiKey>, String> {
-    let port = state.config.lock().unwrap().port;
-    let url = get_management_url(port, "codex-api-key");
-    
-    let client = build_management_client();
-    let response = client
-        .get(&url)
-        .header("X-Management-Key", "proxypal-mgmt-key")
-        .send()
-        .await
-        .map_err(|e| format!("Failed to fetch Codex API keys: {}", e))?;
-    
-    if !response.status().is_success() {
-        return Ok(Vec::new());
-    }
-    
-    let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
-    convert_api_key_response(json, "codex-api-key")
+    let config = state.config.lock().unwrap();
+    Ok(config.codex_api_keys.clone())
 }
 
+// Lưu vào local config vì Management API không hỗ trợ endpoint này
+// Proxy sẽ được restart để áp dụng config mới
 #[tauri::command]
-async fn set_codex_api_keys(state: State<'_, AppState>, keys: Vec<CodexApiKey>) -> Result<(), String> {
-    let port = state.config.lock().unwrap().port;
-    let url = get_management_url(port, "codex-api-key");
-    
-    let client = build_management_client();
-    let body = convert_to_management_format(&keys)?;
-    
-    let response = client
-        .put(&url)
-        .header("X-Management-Key", "proxypal-mgmt-key")
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to set Codex API keys: {}", e))?;
-    
-    if !response.status().is_success() {
-        let status = response.status();
-        let text = response.text().await.unwrap_or_default();
-        return Err(format!("Failed to set Codex API keys: {} - {}", status, text));
-    }
-    
-    // Persist to ProxyPal config for restart persistence
+async fn set_codex_api_keys(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    keys: Vec<CodexApiKey>,
+) -> Result<(), String> {
+    // Lưu keys vào local config
     {
         let mut config = state.config.lock().unwrap();
         config.codex_api_keys = keys;
         save_config_to_file(&config)?;
     }
-    
+
+    // Restart proxy để áp dụng config mới (nếu đang chạy)
+    let is_running = {
+        let status = state.proxy_status.lock().unwrap();
+        status.running
+    };
+
+    if is_running {
+        stop_proxy(app.clone(), state.clone()).await?;
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        start_proxy(app, state).await?;
+    }
+
     Ok(())
 }
 
 #[tauri::command]
-async fn add_codex_api_key(state: State<'_, AppState>, key: CodexApiKey) -> Result<(), String> {
+async fn add_codex_api_key(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    key: CodexApiKey,
+) -> Result<(), String> {
     let mut keys = get_codex_api_keys(state.clone()).await?;
     keys.push(key);
-    set_codex_api_keys(state, keys).await
+    set_codex_api_keys(app, state, keys).await
 }
 
 #[tauri::command]
-async fn delete_codex_api_key(state: State<'_, AppState>, index: usize) -> Result<(), String> {
+async fn delete_codex_api_key(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    index: usize,
+) -> Result<(), String> {
     let mut keys = get_codex_api_keys(state.clone()).await?;
     if index >= keys.len() {
         return Err("Index out of bounds".to_string());
     }
     keys.remove(index);
-    set_codex_api_keys(state, keys).await
+    set_codex_api_keys(app, state, keys).await
 }
 
 // ============================================
@@ -5466,54 +5455,40 @@ async fn set_websocket_auth(state: State<'_, AppState>, value: bool) -> Result<(
     Ok(())
 }
 
-// Get force model mappings from Management API
+// Get force model mappings from local config
+// Management API không hỗ trợ endpoint này
 #[tauri::command]
 async fn get_force_model_mappings(state: State<'_, AppState>) -> Result<bool, String> {
-    let port = state.config.lock().unwrap().port;
-    let url = get_management_url(port, "ampcode/force-model-mappings");
-    
-    let client = build_management_client();
-    let response = client
-        .get(&url)
-        .header("X-Management-Key", "proxypal-mgmt-key")
-        .send()
-        .await
-        .map_err(|e| format!("Failed to get force model mappings: {}", e))?;
-    
-    if !response.status().is_success() {
-        return Ok(false); // Default to false
-    }
-    
-    let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
-    Ok(json.get("force-model-mappings").and_then(|v| v.as_bool()).unwrap_or(false))
+    let config = state.config.lock().unwrap();
+    Ok(config.force_model_mappings)
 }
 
-// Set force model mappings via Management API
+// Set force model mappings - lưu local config và restart proxy
 #[tauri::command]
-async fn set_force_model_mappings(state: State<'_, AppState>, value: bool) -> Result<(), String> {
-    let port = state.config.lock().unwrap().port;
-    let url = get_management_url(port, "ampcode/force-model-mappings");
-    
-    let client = build_management_client();
-    let response = client
-        .put(&url)
-        .header("X-Management-Key", "proxypal-mgmt-key")
-        .json(&serde_json::json!({ "value": value }))
-        .send()
-        .await
-        .map_err(|e| format!("Failed to set force model mappings: {}", e))?;
-    
-    if !response.status().is_success() {
-        let status = response.status();
-        let text = response.text().await.unwrap_or_default();
-        return Err(format!("Failed to set force model mappings: {} - {}", status, text));
+async fn set_force_model_mappings(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    value: bool,
+) -> Result<(), String> {
+    // Lưu vào local config
+    {
+        let mut config = state.config.lock().unwrap();
+        config.force_model_mappings = value;
+        save_config_to_file(&config).map_err(|e| format!("Failed to save config: {}", e))?;
     }
-    
-    // Persist to Tauri config so it survives restart
-    let mut config = state.config.lock().unwrap();
-    config.force_model_mappings = value;
-    save_config_to_file(&config).map_err(|e| format!("Failed to save config: {}", e))?;
-    
+
+    // Restart proxy để áp dụng config mới (nếu đang chạy)
+    let is_running = {
+        let status = state.proxy_status.lock().unwrap();
+        status.running
+    };
+
+    if is_running {
+        stop_proxy(app.clone(), state.clone()).await?;
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        start_proxy(app, state).await?;
+    }
+
     Ok(())
 }
 

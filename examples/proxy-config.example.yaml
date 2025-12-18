@@ -1,0 +1,80 @@
+# ProxyPal generated config - Example
+# Tệp này được tự động sinh ra từ config.json khi khởi động proxy
+
+port: 8317
+auth-dir: "C:\\Users\\YOUR_USERNAME\\.cli-proxy-api"
+api-keys:
+  - "proxypal-local"
+debug: false
+usage-statistics-enabled: false
+logging-to-file: false
+request-retry: 3
+
+# Quota exceeded behavior (xử lý khi hết quota)
+quota-exceeded:
+  switch-project: true
+  switch-preview-model: true
+
+# Enable Management API for OAuth flows
+remote-management:
+  allow-remote: true
+  secret-key: "YOUR_BCRYPT_HASHED_SECRET"
+  disable-control-panel: true
+  panel-github-repository: https://github.com/router-for-me/Cli-Proxy-API-Management-Center
+
+# Claude API keys - Azure AI Foundry
+claude-api-key:
+  - api-key: "YOUR_AZURE_AI_FOUNDRY_API_KEY"
+    base-url: "https://YOUR-RESOURCE.services.ai.azure.com/anthropic"
+    models:
+      - alias: "claude-opus-4-5-20251101"
+        name: "claude-opus-4-5"
+      - alias: "claude-sonnet-4-5-20250929"
+        name: "claude-opus-4-5"
+      - alias: "claude-haiku-4-5-20251001"
+        name: "claude-opus-4-5"
+    proxy-url: ""
+
+# Codex API keys (optional)
+codex-api-key:
+  - api-key: "YOUR_CODEX_API_KEY"
+    base-url: "https://YOUR-CODEX-RESOURCE.services.ai.azure.com/anthropic"
+    proxy-url: ""
+
+# Payload injection for thinking models
+payload:
+  default:
+    - models:
+        - name: "gemini-claude-sonnet-4-5"
+          protocol: "claude"
+        - name: "gemini-claude-opus-4-5"
+          protocol: "claude"
+      params:
+        "thinking.budget_tokens": 16000
+  override: []
+
+# Amp CLI Integration
+ampcode:
+  upstream-url: "https://ampcode.com"
+  upstream-api-key: "YOUR_AMP_API_KEY_HERE"
+  model-mappings:
+    - from: gemini-2.5-flash-lite
+      to: gemini-3-pro-preview
+    - from: claude-sonnet-4-5-20250929
+      to: claude-opus-4-5-20251101
+    - from: claude-haiku-4-5-20251001
+      to: claude-opus-4-5-20251101
+  restrict-management-to-localhost: false
+  force-model-mappings: false
+
+proxy-url: ""
+force-model-prefix: false
+request-log: false
+host: ""
+tls:
+  enable: false
+  cert: ""
+  key: ""
+disable-cooling: false
+max-retry-interval: 0
+ws-auth: false

@@ -1,0 +1,84 @@
+{
+  "port": 8317,
+  "autoStart": true,
+  "launchAtLogin": false,
+  "debug": false,
+  "proxyUrl": "",
+  "requestRetry": 3,
+  "quotaSwitchProject": true,
+  "quotaSwitchPreviewModel": true,
+  "usageStatsEnabled": false,
+  "requestLogging": false,
+  "loggingToFile": false,
+  "configVersion": 1,
+  "ampApiKey": "YOUR_AMP_API_KEY_HERE",
+  "ampModelMappings": [
+    {
+      "from": "gemini-2.5-flash-lite",
+      "to": "gemini-3-pro-preview",
+      "enabled": true
+    },
+    {
+      "from": "claude-sonnet-4-5-20250929",
+      "to": "claude-opus-4-5-20251101",
+      "enabled": true
+    },
+    {
+      "from": "claude-haiku-4-5-20251001",
+      "to": "claude-opus-4-5-20251101",
+      "enabled": true
+    }
+  ],
+  "ampOpenaiProvider": null,
+  "ampOpenaiProviders": [],
+  "ampRoutingMode": "mappings",
+  "copilot": {
+    "enabled": false,
+    "port": 4141,
+    "accountType": "individual",
+    "githubToken": "",
+    "rateLimit": null,
+    "rateLimitWait": false
+  },
+  "forceModelMappings": false,
+  "claudeApiKeys": [
+    {
+      "apiKey": "YOUR_AZURE_AI_FOUNDRY_API_KEY",
+      "baseUrl": "https://YOUR-RESOURCE.services.ai.azure.com/anthropic",
+      "headers": {
+        "x-api-key": "YOUR_AZURE_AI_FOUNDRY_API_KEY",
+        "anthropic-version": "2023-06-01"
+      },
+      "models": [
+        {
+          "name": "claude-opus-4-5",
+          "alias": "claude-opus-4-5-20251101"
+        },
+        {
+          "name": "claude-opus-4-5",
+          "alias": "claude-sonnet-4-5-20250929"
+        },
+        {
+          "name": "claude-opus-4-5",
+          "alias": "claude-haiku-4-5-20251001"
+        }
+      ]
+    }
+  ],
+  "geminiApiKeys": [],
+  "codexApiKeys": [
+    {
+      "apiKey": "YOUR_CODEX_API_KEY",
+      "baseUrl": "https://YOUR-CODEX-RESOURCE.services.ai.azure.com/anthropic",
+      "headers": {
+        "x-api-key": "YOUR_CODEX_API_KEY",
+        "anthropic-version": "2023-06-01"
+      }
+    }
+  ],
+  "thinkingBudgetMode": "custom",
+  "thinkingBudgetCustom": 16000,
+  "reasoningEffortLevel": "xhigh",
+  "closeToTray": true,
+  "maxRetryInterval": 0
+}

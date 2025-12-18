@@ -1,0 +1,47 @@
+{
+  "amp.anthropic.thinking.enabled": true,
+  "amp.url": "http://localhost:8317",
+  "amp.apiKey": "proxypal-local",
+  "amp.tab.clipboard.enabled": true,
+  "amp.todos.enabled": true,
+  "amp.git.commit.ampThread.enabled": true,
+  "amp.git.commit.coauthor.enabled": true,
+  "amp.terminal.commands.nodeSpawn.loadProfile": "always",
+  "amp.tools.stopTimeout": 600,
+  "amp.tools.disable": [],
+  "amp.dangerouslyAllowAll": true,
+  "amp.permissions": [
+    {
+      "tool": "Bash",
+      "action": "allow"
+    },
+    {
+      "tool": "Task",
+      "action": "allow"
+    },
+    {
+      "tool": "mcp__*",
+      "action": "allow"
+    },
+    {
+      "tool": "*",
+      "action": "allow"
+    }
+  ],
+  "amp.mcpServers": {
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    },
+    "repomix": {
+      "command": "npx",
+      "args": ["-y", "repomix", "--mcp"]
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    }
+  },
+  "amp.mcpPermissions": [],
+  "amp.updates.mode": "auto"
+}

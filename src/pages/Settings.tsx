@@ -713,7 +713,7 @@ export function SettingsPage() {
 		const models = availableModels();
 		const groupedModels = {
 			anthropic: models
-				.filter((m) => m.ownedBy === "anthropic")
+				.filter((m) => m.ownedBy === "anthropic" || m.ownedBy === "claude")
 				.map((m) => ({ value: m.id, label: m.id })),
 			google: models
 				.filter((m) => m.ownedBy === "google" || m.ownedBy === "antigravity")
