@@ -134,10 +134,33 @@ pub struct AppConfig {
     // Max retry interval in seconds (synced with CLIProxyAPI)
     #[serde(default)]
     pub max_retry_interval: i32,
+    // Server Mode: Allow remote clients to connect
+    #[serde(default)]
+    pub server_mode: bool,
+    // Bind address: "localhost" (default) or "0.0.0.0" (all interfaces)
+    #[serde(default = "default_bind_address")]
+    pub bind_address: String,
+    // Remote API key for clients connecting from other machines
+    #[serde(default = "default_remote_api_key")]
+    pub remote_api_key: String,
 }
 
 fn default_close_to_tray() -> bool {
     true // Default to close-to-tray behavior
+}
+
+fn default_bind_address() -> String {
+    "localhost".to_string()
+}
+
+fn default_remote_api_key() -> String {
+    // Generate a random API key for remote access
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    format!("proxypal-remote-{:x}", timestamp)
 }
 
 fn default_usage_stats_enabled() -> bool {
@@ -273,6 +296,9 @@ impl Default for AppConfig {
             reasoning_effort_level: "medium".to_string(),
             close_to_tray: true,
             max_retry_interval: 0,
+            server_mode: false,
+            bind_address: default_bind_address(),
+            remote_api_key: default_remote_api_key(),
         }
     }
 }
@@ -1137,14 +1163,31 @@ payload:
         thinking_budget
     );
     
+    // Server Mode: bind address và remote API key
+    let bind_address = if config.server_mode {
+        "0.0.0.0".to_string() // Bind tất cả interfaces khi Server Mode bật
+    } else {
+        config.bind_address.clone()
+    };
+
+    // API keys section: thêm remote API key khi Server Mode bật
+    let api_keys_section = if config.server_mode && !config.remote_api_key.is_empty() {
+        format!(r#"api-keys:
+  - "proxypal-local"
+  - "{}"  # Remote API key for external clients"#, config.remote_api_key)
+    } else {
+        r#"api-keys:
+  - "proxypal-local""#.to_string()
+    };
+
     // Always regenerate config on start because CLIProxyAPI hashes the secret-key in place
     // and we need the plaintext key for Management API access
     let proxy_config = format!(
         r#"# ProxyPal generated config
 port: {}
+bind-address: "{}"
 auth-dir: "~/.cli-proxy-api"
-api-keys:
-  - "proxypal-local"
+{}
 debug: {}
 usage-statistics-enabled: {}
 logging-to-file: {}
@@ -1171,6 +1214,8 @@ ampcode:
   restrict-management-to-localhost: false
 "#,
         config.port,
+        bind_address,
+        api_keys_section,
         config.debug,
         config.usage_stats_enabled,
         config.logging_to_file,
@@ -5972,6 +6017,70 @@ fn get_tool_setup_info(tool_id: String, state: State<AppState>) -> Result<serde_
     Ok(info)
 }
 
+// Get local IP addresses for Server Mode display
+#[tauri::command]
+fn get_local_ip_addresses() -> Vec<String> {
+    let mut addresses = Vec::new();
+
+    // Use local_ip_address crate alternative - manual network interface detection
+    #[cfg(windows)]
+    {
+        // On Windows, use ipconfig to get IP addresses
+        if let Ok(output) = std::process::Command::new("cmd")
+            .args(["/C", "ipconfig"])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                // Look for IPv4 addresses
+                if line.contains("IPv4") || line.contains("IP Address") {
+                    if let Some(ip) = line.split(':').last() {
+                        let ip = ip.trim();
+                        // Filter out localhost and link-local
+                        if !ip.is_empty() && !ip.starts_with("127.") && !ip.starts_with("169.254.") {
+                            addresses.push(ip.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    {
+        // On Unix, use ifconfig or ip command
+        let output = std::process::Command::new("sh")
+            .args(["-c", "ip -4 addr show 2>/dev/null || ifconfig 2>/dev/null"])
+            .output();
+
+        if let Ok(output) = output {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // Parse IP addresses from output
+            for line in stdout.lines() {
+                if line.contains("inet ") && !line.contains("127.0.0.1") {
+                    // Extract IP from "inet 192.168.1.100/24" or "inet addr:192.168.1.100"
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    for (i, part) in parts.iter().enumerate() {
+                        if *part == "inet" && i + 1 < parts.len() {
+                            let ip_part = parts[i + 1];
+                            let ip = ip_part.split('/').next().unwrap_or(ip_part);
+                            let ip = ip.replace("addr:", "");
+                            if !ip.starts_with("127.") && !ip.starts_with("169.254.") {
+                                addresses.push(ip);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Remove duplicates and return
+    addresses.sort();
+    addresses.dedup();
+    addresses
+}
+
 // Check if auto-updater is supported on this platform/install type
 // Linux .deb installations do NOT support auto-update (only AppImage does)
 #[tauri::command]
@@ -6168,6 +6277,8 @@ pub fn run() {
             set_close_to_tray,
             // Updater support check
             is_updater_supported,
+            // Server Mode
+            get_local_ip_addresses,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

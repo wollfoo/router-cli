@@ -281,6 +281,10 @@ export interface AppConfig {
 	ampRoutingMode: string; // "mappings" or "openai"
 	copilot: CopilotConfig;
 	forceModelMappings: boolean; // Force model mappings to take precedence over local API keys
+	// Server Mode: Allow remote clients to connect
+	serverMode: boolean;
+	bindAddress: string; // "localhost" or "0.0.0.0"
+	remoteApiKey: string; // API key for remote clients
 }
 
 export async function getConfig(): Promise<AppConfig> {
@@ -1072,4 +1076,13 @@ export interface UpdaterSupport {
 
 export async function isUpdaterSupported(): Promise<UpdaterSupport> {
 	return invoke<UpdaterSupport>("is_updater_supported");
+}
+
+// ============================================
+// Server Mode - Remote Access
+// ============================================
+
+// Get local IP addresses for Server Mode display
+export async function getLocalIpAddresses(): Promise<string[]> {
+	return invoke<string[]>("get_local_ip_addresses");
 }

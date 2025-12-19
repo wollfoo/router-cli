@@ -18,6 +18,7 @@ import {
 	getCloseToTray,
 	getConfigYaml,
 	getForceModelMappings,
+	getLocalIpAddresses,
 	getMaxRetryInterval,
 	getOAuthExcludedModels,
 	getReasoningEffortSettings,
@@ -145,6 +146,53 @@ export function SettingsPage() {
 			console.error("Failed to check updater support:", error);
 		}
 	});
+
+	// Server Mode state
+	const [localIpAddresses, setLocalIpAddresses] = createSignal<string[]>([]);
+	const [loadingIpAddresses, setLoadingIpAddresses] = createSignal(false);
+	const [copiedApiKey, setCopiedApiKey] = createSignal(false);
+	const [copiedEndpoint, setCopiedEndpoint] = createSignal(false);
+
+	// Load IP addresses when Server Mode is enabled
+	createEffect(async () => {
+		if (config().serverMode) {
+			setLoadingIpAddresses(true);
+			try {
+				const ips = await getLocalIpAddresses();
+				setLocalIpAddresses(ips);
+			} catch (error) {
+				console.error("Failed to get local IP addresses:", error);
+			} finally {
+				setLoadingIpAddresses(false);
+			}
+		}
+	});
+
+	// Generate new remote API key
+	const generateNewApiKey = () => {
+		const timestamp = Date.now().toString(16);
+		const random = Math.random().toString(36).substring(2, 8);
+		const newKey = `proxypal-remote-${timestamp}-${random}`;
+		handleConfigChange("remoteApiKey", newKey);
+		toastStore.success("New API key generated");
+	};
+
+	// Copy to clipboard helper
+	const copyToClipboard = async (text: string, type: "apiKey" | "endpoint") => {
+		try {
+			await navigator.clipboard.writeText(text);
+			if (type === "apiKey") {
+				setCopiedApiKey(true);
+				setTimeout(() => setCopiedApiKey(false), 2000);
+			} else {
+				setCopiedEndpoint(true);
+				setTimeout(() => setCopiedEndpoint(false), 2000);
+			}
+			toastStore.success("Copied to clipboard");
+		} catch {
+			toastStore.error("Failed to copy to clipboard");
+		}
+	};
 
 	// Close to tray setting
 	const [closeToTray, setCloseToTrayState] = createSignal(true);
@@ -2292,6 +2340,177 @@ export function SettingsPage() {
 							<p class="text-xs text-gray-400 dark:text-gray-500">
 								After changing settings, restart the proxy for changes to take
 								effect.
+							</p>
+						</div>
+					</div>
+
+					{/* Server Mode */}
+					<div class="space-y-4">
+						<h2 class="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+							Server Mode
+						</h2>
+
+						<div class="space-y-4 p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
+							<Switch
+								label="Enable Server Mode"
+								description="Allow other machines to connect to this proxy server"
+								checked={config().serverMode}
+								onChange={(checked) => handleConfigChange("serverMode", checked)}
+							/>
+
+							<Show when={config().serverMode}>
+								<div class="border-t border-gray-200 dark:border-gray-700" />
+
+								{/* Remote Endpoint Info */}
+								<div class="space-y-3">
+									<div class="flex items-center gap-2">
+										<svg class="w-5 h-5 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+										</svg>
+										<span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+											Remote Endpoints
+										</span>
+									</div>
+
+									<Show when={loadingIpAddresses()}>
+										<div class="flex items-center gap-2 text-sm text-gray-500">
+											<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+												<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+												<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+											</svg>
+											Detecting network interfaces...
+										</div>
+									</Show>
+
+									<Show when={!loadingIpAddresses() && localIpAddresses().length > 0}>
+										<div class="space-y-2">
+											<For each={localIpAddresses()}>
+												{(ip) => (
+													<div class="flex items-center justify-between p-2 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+														<code class="text-sm font-mono text-gray-700 dark:text-gray-300">
+															http://{ip}:{config().port}/v1
+														</code>
+														<button
+															type="button"
+															onClick={() => copyToClipboard(`http://${ip}:${config().port}/v1`, "endpoint")}
+															class="p-1.5 text-gray-500 hover:text-brand-500 transition-colors"
+															title="Copy endpoint"
+														>
+															<Show when={copiedEndpoint()} fallback={
+																<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+																</svg>
+															}>
+																<svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+																</svg>
+															</Show>
+														</button>
+													</div>
+												)}
+											</For>
+										</div>
+									</Show>
+
+									<Show when={!loadingIpAddresses() && localIpAddresses().length === 0}>
+										<p class="text-sm text-amber-600 dark:text-amber-400">
+											No network interfaces detected. Check your network connection.
+										</p>
+									</Show>
+								</div>
+
+								<div class="border-t border-gray-200 dark:border-gray-700" />
+
+								{/* API Key */}
+								<div class="space-y-3">
+									<div class="flex items-center gap-2">
+										<svg class="w-5 h-5 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+										</svg>
+										<span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+											Remote API Key
+										</span>
+									</div>
+
+									<div class="flex items-center gap-2">
+										<div class="flex-1 flex items-center p-2 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+											<code class="flex-1 text-sm font-mono text-gray-700 dark:text-gray-300 truncate">
+												{config().remoteApiKey || "No API key set"}
+											</code>
+											<button
+												type="button"
+												onClick={() => copyToClipboard(config().remoteApiKey, "apiKey")}
+												class="p-1.5 text-gray-500 hover:text-brand-500 transition-colors"
+												title="Copy API key"
+												disabled={!config().remoteApiKey}
+											>
+												<Show when={copiedApiKey()} fallback={
+													<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+													</svg>
+												}>
+													<svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+													</svg>
+												</Show>
+											</button>
+										</div>
+										<Button
+											variant="ghost"
+											size="sm"
+											onClick={generateNewApiKey}
+											title="Generate new API key"
+										>
+											<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+											</svg>
+										</Button>
+									</div>
+
+									<p class="text-xs text-gray-500 dark:text-gray-400">
+										Remote clients must include this API key in their requests via Authorization header or api-key header.
+									</p>
+								</div>
+
+								<div class="border-t border-gray-200 dark:border-gray-700" />
+
+								{/* Usage Instructions */}
+								<div class="space-y-3">
+									<div class="flex items-center gap-2">
+										<svg class="w-5 h-5 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+										</svg>
+										<span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+											Setup Instructions
+										</span>
+									</div>
+
+									<div class="text-xs text-gray-600 dark:text-gray-400 space-y-2 p-3 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+										<p class="font-medium">On remote machines, configure:</p>
+										<div class="space-y-1.5 font-mono text-[11px]">
+											<p><span class="text-gray-500"># Claude Code / Aider</span></p>
+											<p>ANTHROPIC_BASE_URL=http://{localIpAddresses()[0] || "YOUR_IP"}:{config().port}</p>
+											<p>ANTHROPIC_API_KEY={config().remoteApiKey}</p>
+											<p class="mt-2"><span class="text-gray-500"># OpenAI-compatible</span></p>
+											<p>OPENAI_BASE_URL=http://{localIpAddresses()[0] || "YOUR_IP"}:{config().port}/v1</p>
+											<p>OPENAI_API_KEY={config().remoteApiKey}</p>
+										</div>
+									</div>
+
+									<div class="flex items-start gap-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+										<svg class="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+										</svg>
+										<p class="text-xs text-amber-700 dark:text-amber-300">
+											<strong>Firewall:</strong> Make sure port {config().port} is open on your firewall for incoming connections.
+										</p>
+									</div>
+								</div>
+							</Show>
+
+							<p class="text-xs text-gray-400 dark:text-gray-500">
+								Server Mode allows this machine to act as a central proxy router for other machines in your network.
+								Restart the proxy after enabling to apply changes.
 							</p>
 						</div>
 					</div>

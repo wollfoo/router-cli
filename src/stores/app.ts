@@ -66,6 +66,10 @@ function createAppStore() {
 			rateLimit: undefined,
 			rateLimitWait: false,
 		},
+		// Server Mode defaults
+		serverMode: false,
+		bindAddress: "localhost",
+		remoteApiKey: "",
 	});
 
 	// UI state

@@ -11,12 +11,13 @@
 3. [Cấu hình Coding Tools](#3-cấu-hình-coding-tools)
 4. [Các trang chính](#4-các-trang-chính)
 5. [Model Mapping](#5-model-mapping)
-6. [Custom OpenAI-Compatible Providers](#6-custom-openai-compatible-providers)
-7. [Custom Anthropic API (Azure AI Foundry)](#7-custom-anthropic-api-azure-ai-foundry)
-8. [Amp Code Integration](#8-amp-code-integration)
-9. [Keyboard Shortcuts](#9-keyboard-shortcuts)
-10. [Troubleshooting Windows](#10-troubleshooting-windows)
-11. [Config Files](#11-config-files)
+6. [Server Mode - Chia sẻ với máy Remote](#6-server-mode---chia-sẻ-với-máy-remote)
+7. [Custom OpenAI-Compatible Providers](#7-custom-openai-compatible-providers)
+8. [Custom Anthropic API (Azure AI Foundry)](#8-custom-anthropic-api-azure-ai-foundry)
+9. [Amp Code Integration](#9-amp-code-integration)
+10. [Keyboard Shortcuts](#10-keyboard-shortcuts)
+11. [Troubleshooting Windows](#11-troubleshooting-windows)
+12. [Config Files](#12-config-files)
 
 ---
 
@@ -163,7 +164,189 @@ Chuyển hướng request từ model A sang model B.
 
 ---
 
-## 6. Custom OpenAI-Compatible Providers
+## 6. Server Mode - Chia sẻ với máy Remote
+
+### Mục đích
+
+Biến ProxyPal thành **router trung tâm** cho nhiều máy trong mạng. Các máy remote có thể sử dụng tất cả models đã cấu hình trên máy chủ mà không cần đăng nhập OAuth riêng.
+
+### Bật Server Mode
+
+1. Vào **Settings** → Section **"Server Mode"**
+2. Bật toggle **"Enable Server Mode"**
+3. Sẽ hiển thị:
+   - **Remote Endpoints**: Các địa chỉ IP của máy (ví dụ: `http://10.0.0.4:8317/v1`)
+   - **Remote API Key**: Key để xác thực cho máy remote
+4. **Restart proxy** để áp dụng thay đổi
+
+### Mở Firewall (Mạng nội bộ)
+
+```powershell
+# Windows - Mở port 8317
+New-NetFirewallRule -DisplayName "ProxyPal Server Mode" -Direction Inbound -Protocol TCP -LocalPort 8317 -Action Allow
+
+# Linux
+sudo ufw allow 8317/tcp
+```
+
+### Expose ra Internet với Tailscale Funnel (Khuyên dùng)
+
+Sử dụng **Tailscale Funnel** để expose ProxyPal với domain miễn phí, cố định vĩnh viễn:
+
+#### Cài đặt Tailscale
+
+```powershell
+# Windows - Cài qua winget
+winget install tailscale.tailscale
+
+# Hoặc tải từ https://tailscale.com/download
+```
+
+#### Đăng nhập (miễn phí)
+
+```powershell
+# Đăng nhập với Google/Microsoft/GitHub
+tailscale up
+```
+
+#### Bật Funnel cho ProxyPal
+
+```powershell
+# Expose port 8317
+tailscale funnel 8317
+```
+
+**Kết quả:** Nhận domain dạng `https://your-pc.tail12345.ts.net`
+
+#### So sánh các phương án Tunneling
+
+| Phương án | Bandwidth | Domain cố định | Chi phí |
+|-----------|-----------|----------------|---------|
+| **Tailscale Funnel** | Unlimited | ✅ `*.ts.net` | **$0** |
+| **Cloudflare Tunnel** | Unlimited | ✅ Cần domain riêng | ~$10/năm |
+| **ngrok (Free)** | 1GB/tháng | ❌ Thay đổi | $0 |
+| **Zrok** | 250MB/tháng | ✅ `*.zrok.io` | $0 |
+
+#### Ưu điểm Tailscale Funnel
+
+| Tính năng | Giá trị |
+|-----------|---------|
+| **Domain** | Miễn phí subdomain `*.ts.net` cố định vĩnh viễn |
+| **HTTPS** | Tự động, miễn phí |
+| **Bandwidth** | Không giới hạn data transfer |
+| **Setup** | 1 phút |
+| **Chi phí** | **$0** |
+
+#### Giữ Funnel chạy liên tục
+
+Funnel cần chạy để duy trì kết nối. Có thể:
+
+1. **Chạy thủ công** mỗi lần restart:
+   ```powershell
+   & 'C:\Program Files\Tailscale\tailscale.exe' funnel 8317
+   ```
+
+2. **Tạo Scheduled Task** để tự động chạy khi khởi động
+
+### Cấu hình máy Remote
+
+#### Claude Code / Aider
+
+```bash
+# Qua Tailscale Funnel (khuyên dùng)
+export ANTHROPIC_BASE_URL=https://<YOUR_TAILSCALE_DOMAIN>
+export ANTHROPIC_AUTH_TOKEN=<REMOTE_API_KEY>
+
+# Hoặc qua mạng nội bộ
+export ANTHROPIC_BASE_URL=http://<SERVER_IP>:8317
+export ANTHROPIC_AUTH_TOKEN=<REMOTE_API_KEY>
+
+# Chọn model routing
+export ANTHROPIC_DEFAULT_OPUS_MODEL=gemini-2.5-pro
+export ANTHROPIC_DEFAULT_SONNET_MODEL=gemini-2.5-flash
+export ANTHROPIC_DEFAULT_HAIKU_MODEL=gemini-2.5-flash-lite
+
+# Hoặc dùng model khác
+export ANTHROPIC_MODEL=claude-opus-4-5-20251101
+```
+
+#### OpenAI-compatible clients (Cursor, Continue, Cline)
+
+```bash
+# Qua Tailscale Funnel
+export OPENAI_BASE_URL=https://<YOUR_TAILSCALE_DOMAIN>/v1
+export OPENAI_API_KEY=<REMOTE_API_KEY>
+
+# Hoặc qua mạng nội bộ
+export OPENAI_BASE_URL=http://<SERVER_IP>:8317/v1
+export OPENAI_API_KEY=<REMOTE_API_KEY>
+```
+
+#### Ví dụ thực tế với Tailscale Funnel
+
+```bash
+# Domain thực tế: https://rdp-telstechs.tailba88a3.ts.net
+export ANTHROPIC_BASE_URL="https://rdp-telstechs.tailba88a3.ts.net"
+export ANTHROPIC_API_KEY="proxypal-remote-xxxxx"
+
+# Hoặc cho OpenAI-compatible
+export OPENAI_BASE_URL="https://rdp-telstechs.tailba88a3.ts.net/v1"
+export OPENAI_API_KEY="proxypal-remote-xxxxx"
+```
+
+### Models có sẵn
+
+Tùy thuộc vào providers đã cấu hình trên máy chủ:
+
+| Provider | Models |
+|----------|--------|
+| **Claude OAuth/API** | `claude-opus-4-5-20251101`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5` |
+| **Gemini OAuth** | `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` |
+| **Antigravity** | `gemini-claude-opus-4-5-thinking`, `gemini-claude-sonnet-4-5`, `gemini-3-pro-preview`, `gpt-oss-120b-medium` |
+| **Codex OAuth** | `gpt-5`, `gpt-5.1`, `gpt-5.1-codex`, `gpt-5.2` |
+| **GitHub Copilot** | `gpt-5`, `claude-sonnet-4.5`, `gemini-2.5-pro` (qua copilot-api) |
+
+**Tip:** Xem tất cả models trong **Logs** page (filter DEBUG) sau khi proxy start.
+
+### Workflow
+
+```
+┌─────────────────────────────────────────┐
+│  Máy Remote (Claude Code)               │
+│  Request: gemini-2.5-pro                │
+│  API Key: proxypal-remote-xxx           │
+└──────────────────┬──────────────────────┘
+                   ▼
+┌─────────────────────────────────────────┐
+│  ProxyPal Server (10.0.0.4:8317)        │
+│  1. Xác thực Remote API Key ✓           │
+│  2. Route đến Gemini OAuth              │
+└──────────────────┬──────────────────────┘
+                   ▼
+┌─────────────────────────────────────────┐
+│  Google Gemini API                      │
+│  Response → Máy Remote                  │
+└─────────────────────────────────────────┘
+```
+
+### Quản lý API Key
+
+- **Generate new key**: Click nút refresh bên cạnh API key
+- **Copy key**: Click icon copy để sao chép
+- Key được lưu trong config và tự động thêm vào proxy khi Server Mode bật
+
+### Lưu ý bảo mật
+
+| Lưu ý | Chi tiết |
+|-------|----------|
+| **Private network** | Chỉ nên dùng trong mạng nội bộ hoặc VPN |
+| **Firewall** | Chỉ mở port cần thiết (8317) |
+| **API Key** | Không chia sẻ API key công khai |
+| **Restart** | Cần restart proxy sau khi bật/tắt Server Mode |
+
+---
+
+## 7. Custom OpenAI-Compatible Providers
 
 ### Mục đích
 
@@ -197,7 +380,7 @@ Thêm bất kỳ provider nào hỗ trợ OpenAI API format.
 
 ---
 
-## 7. Custom Anthropic API (Azure AI Foundry)
+## 8. Custom Anthropic API (Azure AI Foundry)
 
 ### Mục đích
 
@@ -374,7 +557,7 @@ curl http://localhost:8317/v1/messages `
 
 ---
 
-## 8. Amp Code Integration
+## 9. Amp Code Integration
 
 ### Mục đích
 
@@ -459,7 +642,7 @@ Xem thêm trong thư mục `examples/` để có cấu hình mẫu đầy đủ.
 
 ---
 
-## 9. Keyboard Shortcuts
+## 10. Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
@@ -469,7 +652,7 @@ Xem thêm trong thư mục `examples/` để có cấu hình mẫu đầy đủ.
 
 ---
 
-## 10. Troubleshooting Windows
+## 11. Troubleshooting Windows
 
 ### Port đã được sử dụng
 
@@ -524,7 +707,7 @@ Nguyên nhân: Model name trong request không khớp deployment name trên Azur
 
 ---
 
-## 11. Config Files
+## 12. Config Files
 
 ### Location
 
@@ -641,5 +824,5 @@ examples/
 
 ---
 
-*Cập nhật: 2025-12-18*
-*Phiên bản: 0.1.63*
+*Cập nhật: 2025-12-19*
+*Phiên bản: 0.1.64*
