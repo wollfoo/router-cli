@@ -1,0 +1,56 @@
+From 61eb7c8847d7ac1cd86bd80ad6713491bf4d956d Mon Sep 17 00:00:00 2001
+From: ProxyPal Fix <proxypal@example.com>
+Date: Fri, 19 Dec 2025 21:30:45 +0000
+Subject: [PATCH] fix: ensure thinking blocks come first in assistant messages
+
+When converting OpenAI requests to Claude format, assistant messages
+containing reasoning_content (OpenAI o1-style) must have thinking
+blocks placed FIRST in the content array before any tool_use blocks.
+
+This fixes Claude API validation error:
+"If an assistant message contains any thinking blocks, the first block
+must be thinking or redacted_thinking. Found tool_use."
+
+The fix:
+1. Extracts reasoning_content from OpenAI assistant messages
+2. Converts it to Claude thinking block format
+3. Prepends it to the content array before processing tool_calls
+
+This ensures proper content block ordering per Claude API requirements.
+---
+ .../chat-completions/claude_openai_request.go | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/internal/translator/claude/openai/chat-completions/claude_openai_request.go b/internal/translator/claude/openai/chat-completions/claude_openai_request.go
+index 9122b97..6f6700a 100644
+--- a/internal/translator/claude/openai/chat-completions/claude_openai_request.go
++++ b/internal/translator/claude/openai/chat-completions/claude_openai_request.go
+@@ -212,6 +212,25 @@ func ConvertOpenAIRequestToClaude(modelName string, inputRawJSON []byte, stream
+ 					msg["content"] = []interface{}{}
+ 				}
+ 
++				// Handle reasoning_content for assistant messages (OpenAI o1-style reasoning)
++				// Must be converted to thinking blocks and placed FIRST before any other content
++				// per Claude API requirement: "If an assistant message contains any thinking blocks,
++				// the first block must be thinking or redacted_thinking"
++				if role == "assistant" {
++					if reasoningContent := message.Get("reasoning_content"); reasoningContent.Exists() && reasoningContent.String() != "" {
++						// Prepend thinking block to content
++						thinkingBlock := map[string]interface{}{
++							"type":     "thinking",
++							"thinking": reasoningContent.String(),
++						}
++						if existingContent, ok := msg["content"].([]interface{}); ok {
++							msg["content"] = append([]interface{}{thinkingBlock}, existingContent...)
++						} else {
++							msg["content"] = []interface{}{thinkingBlock}
++						}
++					}
++				}
++
+ 				// Handle tool calls (for assistant messages)
+ 				if toolCalls := message.Get("tool_calls"); toolCalls.Exists() && toolCalls.IsArray() && role == "assistant" {
+ 					var contentParts []interface{}
+-- 
+2.43.0.windows.1
+
