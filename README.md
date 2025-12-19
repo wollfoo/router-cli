@@ -40,18 +40,50 @@ ProxyPal can act as a **central model router** for multiple machines in your net
 
 Use **Tailscale Funnel** to expose ProxyPal with a free, permanent domain (no domain purchase needed):
 
+#### Install & Setup
+
 ```powershell
 # Install Tailscale
 winget install tailscale.tailscale
 
 # Login (free account)
 tailscale up
+```
 
-# Expose ProxyPal
+#### Run Funnel
+
+```powershell
+# Foreground (stops when terminal closes)
 tailscale funnel 8317
+
+# Background (persists after terminal closes) - RECOMMENDED
+tailscale funnel --bg 8317
+```
+
+**Windows Note:** If `tailscale` not in PATH, use full path:
+```powershell
+& 'C:\Program Files\Tailscale\tailscale.exe' funnel --bg 8317
 ```
 
 You'll get a permanent URL like: `https://your-pc.tail12345.ts.net`
+
+#### Check Funnel Status
+
+```powershell
+tailscale funnel status
+# Or with full path:
+& 'C:\Program Files\Tailscale\tailscale.exe' funnel status
+```
+
+#### Connection Options
+
+| Method | URL | When to use |
+|--------|-----|-------------|
+| **Tailscale Funnel** | `https://xxx.ts.net` | Remote machine without Tailscale |
+| **Tailscale IP** | `http://100.x.x.x:8317` | Both machines have Tailscale (faster) |
+| **LAN IP** | `http://192.168.x.x:8317` | Same local network |
+
+Get Tailscale IP: `tailscale ip -4`
 
 | Feature | Value |
 |---------|-------|
@@ -59,6 +91,15 @@ You'll get a permanent URL like: `https://your-pc.tail12345.ts.net`
 | HTTPS | Automatic |
 | Bandwidth | Unlimited |
 | Cost | **$0** |
+
+#### Troubleshooting Funnel
+
+| Issue | Solution |
+|-------|----------|
+| `No serve config` | Run `tailscale funnel 8317` |
+| `Connection refused` | Check proxy is running + Server Mode enabled |
+| `ECONNRESET` | Funnel not running, restart with `tailscale funnel --bg 8317` |
+| Funnel needs approval | Go to [Tailscale Admin Console](https://login.tailscale.com/admin) → approve |
 
 ### Configure Remote Machines
 
@@ -85,15 +126,15 @@ export OPENAI_API_KEY=<REMOTE_API_KEY>
 
 ### Available Models
 
-Models depend on your configured providers. Example setup:
+Models depend on your configured providers. Full model list (updated 2025-12-19):
 
 | Provider | Models |
 |----------|--------|
 | **Claude OAuth/API** | `claude-opus-4-5-20251101`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5` |
 | **Gemini OAuth** | `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` |
-| **Antigravity** | `gemini-claude-opus-4-5-thinking`, `gemini-claude-sonnet-4-5`, `gemini-3-pro-preview` |
-| **Codex OAuth** | `gpt-5`, `gpt-5.1`, `gpt-5.1-codex`, `gpt-5.2` |
-| **GitHub Copilot** | `gpt-5`, `claude-sonnet-4.5`, `gemini-2.5-pro` (via copilot-api) |
+| **Antigravity** (10 models) | `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-2.5-computer-use-preview-10-2025`, `gemini-3-pro-preview`, `gemini-3-pro-image-preview`, `gemini-3-flash-preview`, `gemini-claude-sonnet-4-5`, `gemini-claude-sonnet-4-5-thinking`, `gemini-claude-opus-4-5-thinking`, `gpt-oss-120b-medium` |
+| **Codex OAuth** (8 models) | `gpt-5`, `gpt-5-codex`, `gpt-5.1`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1-codex-max`, `gpt-5.2` |
+| **GitHub Copilot** (23 models) | `gpt-4`, `gpt-4.1`, `gpt-4o`, `gpt-4-turbo`, `gpt-5`, `gpt-5-mini`, `gpt-5-codex`, `gpt-5.1`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1-codex-max`, `gpt-5.2`, `o1`, `o1-mini`, `grok-code-fast-1`, `raptor-mini`, `gemini-2.5-pro`, `gemini-3-pro-preview`, `claude-haiku-4.5`, `claude-opus-4.1`, `claude-sonnet-4`, `claude-sonnet-4.5`, `claude-opus-4.5` |
 
 View all available models in **Logs** page (DEBUG level) after proxy starts.
 
@@ -162,10 +203,6 @@ If adding support for a new coding agent:
 - **TypeScript**: Follow existing patterns, use `type` imports
 - **Rust**: Use `cargo check` before committing
 - **Commits**: Clear, descriptive messages
-
-## Support
-
-If you find ProxyPal useful, consider [buying me a coffee](https://buymeacoffee.com/heyhuynhgiabuu).
 
 ## License
 

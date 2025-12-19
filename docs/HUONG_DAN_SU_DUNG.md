@@ -209,14 +209,61 @@ winget install tailscale.tailscale
 tailscale up
 ```
 
-#### Bật Funnel cho ProxyPal
+#### Chạy Funnel
 
 ```powershell
-# Expose port 8317
+# Foreground (tắt khi đóng terminal)
 tailscale funnel 8317
+
+# Background (tiếp tục chạy sau khi đóng terminal) - KHUYÊN DÙNG
+tailscale funnel --bg 8317
+```
+
+**Lưu ý Windows:** Nếu `tailscale` không có trong PATH, dùng đường dẫn đầy đủ:
+```powershell
+& 'C:\Program Files\Tailscale\tailscale.exe' funnel --bg 8317
 ```
 
 **Kết quả:** Nhận domain dạng `https://your-pc.tail12345.ts.net`
+
+#### Kiểm tra Funnel Status
+
+```powershell
+tailscale funnel status
+
+# Hoặc với đường dẫn đầy đủ:
+& 'C:\Program Files\Tailscale\tailscale.exe' funnel status
+```
+
+Kết quả khi Funnel đang chạy:
+```
+Available on the internet:
+
+https://your-pc.tail12345.ts.net/
+|-- proxy http://127.0.0.1:8317
+```
+
+Nếu thấy `No serve config` → Funnel chưa được bật.
+
+#### Tắt Funnel
+
+```powershell
+# Tắt Funnel
+tailscale funnel off
+
+# Hoặc
+& 'C:\Program Files\Tailscale\tailscale.exe' funnel off
+```
+
+#### Các phương thức kết nối
+
+| Phương thức | URL | Khi nào dùng |
+|-------------|-----|--------------|
+| **Tailscale Funnel** | `https://xxx.ts.net` | Máy remote không cài Tailscale |
+| **IP Tailscale** | `http://100.x.x.x:8317` | Cả 2 máy đều cài Tailscale (nhanh hơn) |
+| **IP LAN** | `http://192.168.x.x:8317` | Cùng mạng nội bộ |
+
+Lấy IP Tailscale: `tailscale ip -4` hoặc `& 'C:\Program Files\Tailscale\tailscale.exe' ip -4`
 
 #### So sánh các phương án Tunneling
 
@@ -239,14 +286,31 @@ tailscale funnel 8317
 
 #### Giữ Funnel chạy liên tục
 
-Funnel cần chạy để duy trì kết nối. Có thể:
+**Cách 1: Chạy background (Khuyên dùng)**
+```powershell
+& 'C:\Program Files\Tailscale\tailscale.exe' funnel --bg 8317
+```
 
-1. **Chạy thủ công** mỗi lần restart:
-   ```powershell
-   & 'C:\Program Files\Tailscale\tailscale.exe' funnel 8317
-   ```
+**Cách 2: Tạo Scheduled Task** để tự động chạy khi khởi động Windows
 
-2. **Tạo Scheduled Task** để tự động chạy khi khởi động
+#### Troubleshooting Tailscale Funnel
+
+| Lỗi | Nguyên nhân | Giải pháp |
+|-----|-------------|-----------|
+| `No serve config` | Funnel chưa bật | Chạy `tailscale funnel --bg 8317` |
+| `Connection refused` | Proxy không chạy hoặc Server Mode chưa bật | Kiểm tra ProxyPal: Start proxy + Enable Server Mode |
+| `ECONNRESET` | Funnel đã tắt | Chạy lại `tailscale funnel --bg 8317` |
+| `tailscale: command not found` | Tailscale không có trong PATH | Dùng đường dẫn đầy đủ: `& 'C:\Program Files\Tailscale\tailscale.exe'` |
+| Funnel cần approval | Admin chưa approve | Vào [Tailscale Admin Console](https://login.tailscale.com/admin) → approve funnel |
+
+#### Test kết nối
+
+```powershell
+# Test từ máy bất kỳ
+curl https://your-pc.tail12345.ts.net/v1/models -H "Authorization: Bearer YOUR_REMOTE_API_KEY"
+
+# Nếu thành công, sẽ trả về danh sách models
+```
 
 ### Cấu hình máy Remote
 
@@ -296,15 +360,15 @@ export OPENAI_API_KEY="proxypal-remote-xxxxx"
 
 ### Models có sẵn
 
-Tùy thuộc vào providers đã cấu hình trên máy chủ:
+Tùy thuộc vào providers đã cấu hình trên máy chủ. Danh sách đầy đủ (cập nhật 2025-12-19):
 
-| Provider | Models |
-|----------|--------|
-| **Claude OAuth/API** | `claude-opus-4-5-20251101`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5` |
-| **Gemini OAuth** | `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` |
-| **Antigravity** | `gemini-claude-opus-4-5-thinking`, `gemini-claude-sonnet-4-5`, `gemini-3-pro-preview`, `gpt-oss-120b-medium` |
-| **Codex OAuth** | `gpt-5`, `gpt-5.1`, `gpt-5.1-codex`, `gpt-5.2` |
-| **GitHub Copilot** | `gpt-5`, `claude-sonnet-4.5`, `gemini-2.5-pro` (qua copilot-api) |
+| Provider | Số lượng | Models |
+|----------|----------|--------|
+| **Claude OAuth/API** | 3 | `claude-opus-4-5-20251101`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5` |
+| **Gemini OAuth** | 3 | `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` |
+| **Antigravity** | 10 | `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-2.5-computer-use-preview-10-2025`, `gemini-3-pro-preview`, `gemini-3-pro-image-preview`, `gemini-3-flash-preview`, `gemini-claude-sonnet-4-5`, `gemini-claude-sonnet-4-5-thinking`, `gemini-claude-opus-4-5-thinking`, `gpt-oss-120b-medium` |
+| **Codex OAuth** | 8 | `gpt-5`, `gpt-5-codex`, `gpt-5.1`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1-codex-max`, `gpt-5.2` |
+| **GitHub Copilot** | 23 | `gpt-4`, `gpt-4.1`, `gpt-4o`, `gpt-4-turbo`, `gpt-5`, `gpt-5-mini`, `gpt-5-codex`, `gpt-5.1`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1-codex-max`, `gpt-5.2`, `o1`, `o1-mini`, `grok-code-fast-1`, `raptor-mini`, `gemini-2.5-pro`, `gemini-3-pro-preview`, `claude-haiku-4.5`, `claude-opus-4.1`, `claude-sonnet-4`, `claude-sonnet-4.5`, `claude-opus-4.5` |
 
 **Tip:** Xem tất cả models trong **Logs** page (filter DEBUG) sau khi proxy start.
 
@@ -815,14 +879,3 @@ examples/
 └─────────────────────────────────────────────────────────────┘
 ```
 
----
-
-## Hỗ trợ
-
-- GitHub Issues: https://github.com/nicepkg/proxypal/issues
-- Buy me a coffee: https://buymeacoffee.com/nicepkg
-
----
-
-*Cập nhật: 2025-12-19*
-*Phiên bản: 0.1.64*
