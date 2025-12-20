@@ -288,7 +288,9 @@ Lấy IP Tailscale: `tailscale ip -4` hoặc `& 'C:\Program Files\Tailscale\tail
 
 **Cách 1: Chạy background (Khuyên dùng)**
 ```powershell
+
 & 'C:\Program Files\Tailscale\tailscale.exe' funnel --bg 8317
+
 ```
 
 **Cách 2: Tạo Scheduled Task** để tự động chạy khi khởi động Windows
